@@ -1,69 +1,152 @@
-import Image from "next/image";
+'use client';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
+import { KPICard } from '@/components/dashboard/KPICard';
+import { ScoreDistributionChart } from '@/components/dashboard/ScoreDistributionChart';
+import { SubjectPerformanceChart } from '@/components/dashboard/SubjectPerformanceChart';
+import { PerformanceOverviewChart } from '@/components/dashboard/PerformanceOverviewChart';
+import { RecentStudentsTable } from '@/components/dashboard/RecentStudentsTable';
+import { InsightPanel } from '@/components/dashboard/InsightPanel';
+import { studentService } from '@/services/studentService';
+import { Student, ScoreRange, SubjectAverage } from '@/types';
+import { mean, standardDeviation, getPassRate, getAtRiskCount } from '@/utils/stats';
 
-export default function Home() {
+function SkeletonCard() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 space-y-2">
+          <div className="h-3 w-24 rounded bg-gray-100" />
+          <div className="h-7 w-16 rounded bg-gray-200" />
+          <div className="h-3 w-32 rounded bg-gray-100" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <div className="w-9 h-9 rounded-lg bg-gray-100" />
+      </div>
     </div>
+  );
+}
+
+function SkeletonChart() {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm animate-pulse">
+      <div className="space-y-2 mb-4">
+        <div className="h-4 w-32 rounded bg-gray-100" />
+        <div className="h-3 w-48 rounded bg-gray-100" />
+      </div>
+      <div className="h-[200px] rounded-lg bg-gray-50" />
+    </div>
+  );
+}
+
+export default function OverviewPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [scoreRanges, setScoreRanges] = useState<ScoreRange[]>([]);
+  const [subjectAverages, setSubjectAverages] = useState<SubjectAverage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      studentService.getAll(),
+      studentService.getScoreDistribution(),
+      studentService.getSubjectAverages(),
+    ]).then(([s, sr, sa]) => {
+      setStudents(s);
+      setScoreRanges(sr);
+      setSubjectAverages(sa);
+      setLoading(false);
+    });
+  }, []);
+
+  const gpas = students.map(s => s.gpa);
+  const kpis = [
+    {
+      title: 'Total Students',
+      value: students.length.toLocaleString(),
+      description: 'Tổng số sinh viên đang theo dõi',
+      icon: 'Users',
+      variant: 'default' as const,
+      trend: { value: 12, isPositive: true },
+    },
+    {
+      title: 'Average GPA',
+      value: mean(gpas).toFixed(2),
+      description: `Độ lệch chuẩn: ${standardDeviation(gpas).toFixed(2)}`,
+      icon: 'Star',
+      variant: 'info' as const,
+      trend: { value: 3, isPositive: true },
+    },
+    {
+      title: 'Pass Rate',
+      value: `${getPassRate(students, 5).toFixed(1)}%`,
+      description: 'Tỷ lệ đạt điểm ≥ 5.0',
+      icon: 'TrendingUp',
+      variant: 'success' as const,
+    },
+    {
+      title: 'Students At Risk',
+      value: getAtRiskCount(students, 2),
+      description: 'Sinh viên GPA < 2.0 cần hỗ trợ',
+      icon: 'AlertTriangle',
+      variant: 'warning' as const,
+      trend: { value: 5, isPositive: false },
+    },
+  ];
+
+  const recent = [...students].slice(0, 8);
+
+  return (
+    <MainLayout>
+      <Header title="Overview" subtitle="Tổng quan kết quả học tập" />
+      <main className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* KPI Cards */}
+        <section aria-label="KPI metrics">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+              : kpis.map((kpi, i) => <KPICard key={kpi.title} {...kpi} index={i} />)}
+          </div>
+        </section>
+
+        {/* Charts */}
+        <section aria-label="Charts">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => <SkeletonChart key={i} />)
+            ) : (
+              <>
+                <ScoreDistributionChart data={scoreRanges} />
+                <SubjectPerformanceChart data={subjectAverages} />
+                <PerformanceOverviewChart students={students} />
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Bottom section */}
+        <section aria-label="Recent students and insights">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <motion.div
+              className="xl:col-span-2"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: loading ? 0 : 1, y: loading ? 12 : 0 }}
+              transition={{ duration: 0.3, delay: 0.3 }}
+            >
+              {!loading && <RecentStudentsTable students={recent} />}
+              {loading && <SkeletonChart />}
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: loading ? 0 : 1, y: loading ? 12 : 0 }}
+              transition={{ duration: 0.3, delay: 0.4 }}
+            >
+              {!loading && <InsightPanel students={students} subjectAverages={subjectAverages} />}
+              {loading && <SkeletonChart />}
+            </motion.div>
+          </div>
+        </section>
+      </main>
+    </MainLayout>
   );
 }
