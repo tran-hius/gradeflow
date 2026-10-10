@@ -1,8 +1,14 @@
+import enum
+
 from sqlalchemy import String, Enum
 from sqlalchemy.orm import Mapped, mapped_column
+from database.session import Base
 
-from app.database.session import Base
-from app.utils.enums import UserRole
+
+class Role(str, enum.Enum):
+    ADMIN = "admin"
+    TEACHER = "teacher"
+    STUDENT = "student"
 
 
 class User(Base):
@@ -11,4 +17,4 @@ class User(Base):
     user_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)
+    role: Mapped[Role] = mapped_column(Enum(Role), nullable=False, default=Role.STUDENT)
