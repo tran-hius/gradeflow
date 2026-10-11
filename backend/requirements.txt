@@ -6,3 +6,8 @@ cryptography
 pydantic
 pydantic-settings
 python-dotenv
+asyncmy
+greenlet
+email-validator
+numpy
+pandas

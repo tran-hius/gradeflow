@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { studentService } from '@/services/studentService';
+import { gradeService } from '@/services/gradeService';
 import { Student } from '@/types';
 import { getStatusLabel, getStatusColor, formatGPA } from '@/utils/stats';
 
@@ -51,7 +52,27 @@ function DeleteDialog({ student, onConfirm, onClose }: { student: Student; onCon
   );
 }
 
+const SUBJECT_LABELS: Record<string, string> = {
+  math: 'Toán học',
+  physics: 'Vật lý',
+  chemistry: 'Hóa học',
+  english: 'Tiếng Anh',
+  literature: 'Ngữ văn',
+};
+
 function StudentDetailDialog({ student, onClose }: { student: Student; onClose: () => void }) {
+  const [grades, setGrades] = useState<{ grade_id: number; subject: string; score: number }[]>([]);
+  const [loadingGrades, setLoadingGrades] = useState(true);
+
+  useEffect(() => {
+    gradeService.getStudentGrades(Number(student.id)).then((data: any) => {
+      if (data && data.grades) {
+        setGrades(data.grades);
+      }
+      setLoadingGrades(false);
+    });
+  }, [student.id]);
+
   return (
     <DialogContent className="max-w-2xl">
       <DialogHeader>
@@ -72,16 +93,348 @@ function StudentDetailDialog({ student, onClose }: { student: Student; onClose: 
         </div>
       </div>
       <div className="mt-4">
-        <p className="text-xs font-semibold text-gray-500 mb-2">Điểm số các môn</p>
-        <div className="grid grid-cols-2 gap-2">
-          {student.scores.map(sc => (
-            <div key={sc.subject} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5">
-              <span className="text-xs text-gray-600 truncate">{sc.subject}</span>
-              <span className={`text-xs font-semibold ml-2 ${sc.score >= 7 ? 'text-green-600' : sc.score >= 5 ? 'text-yellow-600' : 'text-red-500'}`}>{sc.score}</span>
-            </div>
-          ))}
-        </div>
+        <p className="text-xs font-semibold text-gray-500 mb-2">Điểm số các môn (Dữ liệu thật từ MySQL)</p>
+        {loadingGrades ? (
+          <p className="text-xs text-gray-400 py-2">Đang tải điểm từ cơ sở dữ liệu...</p>
+        ) : grades.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {grades.map(g => (
+              <div key={g.grade_id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 border border-gray-100">
+                <span className="text-xs text-gray-700 font-medium">{SUBJECT_LABELS[g.subject] || g.subject}</span>
+                <span className={`text-xs font-bold ml-2 ${g.score >= 8.5 ? 'text-indigo-600' : g.score >= 6.5 ? 'text-green-600' : g.score >= 5 ? 'text-yellow-600' : 'text-red-500'}`}>{g.score}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 py-2">Chưa có điểm số môn học nào.</p>
+        )}
       </div>
+    </DialogContent>
+  );
+}
+
+function EditStudentDialog({
+  student,
+  onConfirm,
+  onClose,
+}: {
+  student: Student;
+  onConfirm: (data: Partial<Student>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(student.name);
+  const [email, setEmail] = useState(student.email);
+  const [className, setClassName] = useState(student.class);
+  const [major, setMajor] = useState(student.major);
+  const [year, setYear] = useState(student.year);
+  const [gpa, setGpa] = useState(student.gpa);
+  const [status, setStatus] = useState<Student['status']>(student.status);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.error('Họ và tên không được để trống');
+      return;
+    }
+    if (!email.trim()) {
+      toast.error('Email không được để trống');
+      return;
+    }
+    const numGpa = Number(gpa);
+    if (isNaN(numGpa) || numGpa < 0 || numGpa > 10) {
+      toast.error('GPA phải từ 0 đến 10');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onConfirm({
+        name,
+        email,
+        class: className,
+        major,
+        year: Number(year),
+        gpa: numGpa,
+        status,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <DialogContent className="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Chỉnh sửa thông tin sinh viên</DialogTitle>
+        <DialogDescription>
+          Mã số sinh viên: <strong>{student.studentId}</strong>
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Họ và tên</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nguyễn Văn A"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Email</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="sv@gradeflow.edu.vn"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Lớp</label>
+            <Select value={className} onValueChange={setClassName}>
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn lớp" />
+              </SelectTrigger>
+              <SelectContent>
+                {CLASSES.filter((c) => c !== 'Tất cả').map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Chuyên ngành</label>
+            <Input
+              value={major}
+              onChange={(e) => setMajor(e.target.value)}
+              placeholder="Computer Science"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Khóa (Năm)</label>
+            <Input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              min={2000}
+              max={2100}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">GPA (Thang 10)</label>
+            <Input
+              type="number"
+              step="0.01"
+              value={gpa}
+              onChange={(e) => setGpa(Number(e.target.value))}
+              min={0}
+              max={10}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Xếp loại</label>
+            <Select value={status} onValueChange={(val) => setStatus(val as Student['status'])}>
+              <SelectTrigger>
+                <SelectValue placeholder="Xếp loại" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.filter((s) => s !== 'Tất cả').map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_LABELS[s] || s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
+            Hủy
+          </Button>
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+          </Button>
+        </div>
+      </form>
+    </DialogContent>
+  );
+}
+
+function CreateStudentDialog({
+  onConfirm,
+  onClose,
+}: {
+  onConfirm: (data: Omit<Student, 'id'>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [studentId, setStudentId] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [className, setClassName] = useState('CS2021A');
+  const [major, setMajor] = useState('Computer Science');
+  const [year, setYear] = useState(2023);
+  const [gpa, setGpa] = useState(7.0);
+  const [status, setStatus] = useState<Student['status']>('good');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentId.trim()) {
+      toast.error('Mã sinh viên không được để trống');
+      return;
+    }
+    if (!name.trim()) {
+      toast.error('Họ và tên không được để trống');
+      return;
+    }
+    if (!email.trim()) {
+      toast.error('Email không được để trống');
+      return;
+    }
+    const numGpa = Number(gpa);
+    if (isNaN(numGpa) || numGpa < 0 || numGpa > 10) {
+      toast.error('GPA phải từ 0 đến 10');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onConfirm({
+        studentId: studentId.trim(),
+        name: name.trim(),
+        email: email.trim(),
+        class: className,
+        major: major.trim(),
+        year: Number(year),
+        gpa: numGpa,
+        status,
+        scores: [],
+        enrolledDate: `${year}-09-01`,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <DialogContent className="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Thêm sinh viên mới</DialogTitle>
+        <DialogDescription>
+          Nhập thông tin hồ sơ sinh viên để lưu vào cơ sở dữ liệu
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Mã sinh viên *</label>
+            <Input
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="SV20230001"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Họ và tên *</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nguyễn Văn A"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Email *</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="sv@gradeflow.edu.vn"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Lớp</label>
+            <Select value={className} onValueChange={setClassName}>
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn lớp" />
+              </SelectTrigger>
+              <SelectContent>
+                {CLASSES.filter((c) => c !== 'Tất cả').map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Chuyên ngành</label>
+            <Input
+              value={major}
+              onChange={(e) => setMajor(e.target.value)}
+              placeholder="Computer Science"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Khóa (Năm)</label>
+            <Input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              min={2000}
+              max={2100}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">GPA (0 - 10)</label>
+            <Input
+              type="number"
+              step="0.01"
+              value={gpa}
+              onChange={(e) => setGpa(Number(e.target.value))}
+              min={0}
+              max={10}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
+            Hủy
+          </Button>
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {isSubmitting ? 'Đang thêm...' : 'Thêm sinh viên'}
+          </Button>
+        </div>
+      </form>
     </DialogContent>
   );
 }
@@ -94,8 +447,57 @@ export default function StudentsPageClient({ initialStudents }: { initialStudent
   const [filterStatus, setFilterStatus] = useState('Tất cả');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [editTarget, setEditTarget] = useState<Student | null>(null);
   const [viewTarget, setViewTarget] = useState<Student | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  const handleCreate = async (newStudentData: Omit<Student, 'id'>) => {
+    try {
+      const created = await studentService.create(newStudentData);
+      setStudents((prev) => [created, ...prev]);
+      toast.success(`Đã thêm sinh viên ${created.name} thành công`);
+      setIsCreateOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi thêm sinh viên');
+    }
+  };
+
+  const handleUpdate = async (id: string, updatedData: Partial<Student>) => {
+    try {
+      const updated = await studentService.update(id, updatedData);
+      if (updated) {
+        setStudents((prev) => prev.map((s) => (s.id === id ? updated : s)));
+        toast.success(`Cập nhật sinh viên ${updated.name} thành công`);
+        setEditTarget(null);
+      } else {
+        toast.error('Không thể cập nhật sinh viên');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi cập nhật sinh viên');
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    studentService
+      .getAll(0, 100)
+      .then((data) => {
+        if (isMounted && data && data.length > 0) {
+          setStudents(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load students:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     return students.filter(s => {
@@ -135,7 +537,7 @@ export default function StudentsPageClient({ initialStudents }: { initialStudent
 
   return (
     <MainLayout>
-      <Header title="Students" subtitle={`${filtered.length} sinh viên`} showAddButton onAddStudent={() => toast.info('Tính năng thêm sinh viên đang phát triển')} />
+      <Header title="Students" subtitle={`${filtered.length} sinh viên`} />
       <main className="flex-1 overflow-y-auto p-6 space-y-4">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
@@ -151,14 +553,19 @@ export default function StudentsPageClient({ initialStudents }: { initialStudent
             <SelectTrigger className="w-36 text-xs h-9"><SelectValue /></SelectTrigger>
             <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}</SelectContent>
           </Select>
-          {selected.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="text-xs gap-1.5 ml-auto">
-              <Trash2 size={13} aria-hidden /> Xóa {selected.size} sinh viên
+          <div className="flex items-center gap-2 ml-auto">
+            {selected.size > 0 && (
+              <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="text-xs gap-1.5">
+                <Trash2 size={13} aria-hidden /> Xóa ({selected.size})
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => toast.info('Tính năng xuất đang phát triển')}>
+              <Download size={13} aria-hidden /> Xuất
             </Button>
-          )}
-          <Button variant="outline" size="sm" className="text-xs gap-1.5 ml-auto" onClick={() => toast.info('Tính năng xuất đang phát triển')}>
-            <Download size={13} aria-hidden /> Xuất
-          </Button>
+            <Button size="sm" className="text-xs gap-1.5" onClick={() => setIsCreateOpen(true)}>
+              <Plus size={14} aria-hidden /> Add Student
+            </Button>
+          </div>
         </div>
 
         {/* Table */}
@@ -218,7 +625,7 @@ export default function StudentsPageClient({ initialStudents }: { initialStudent
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1 justify-end">
                                 <button onClick={() => setViewTarget(s)} className="p-1.5 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" aria-label={`View ${s.name}`}><Eye size={14} aria-hidden /></button>
-                                <button onClick={() => toast.info('Tính năng chỉnh sửa đang phát triển')} className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" aria-label={`Edit ${s.name}`}><Pencil size={14} aria-hidden /></button>
+                                <button onClick={() => setEditTarget(s)} className="p-1.5 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" aria-label={`Edit ${s.name}`}><Pencil size={14} aria-hidden /></button>
                                 <button onClick={() => setDeleteTarget(s)} className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" aria-label={`Delete ${s.name}`}><Trash2 size={14} aria-hidden /></button>
                               </div>
                             </td>
@@ -264,6 +671,27 @@ export default function StudentsPageClient({ initialStudents }: { initialStudent
       {/* View Detail Dialog */}
       <Dialog open={!!viewTarget} onOpenChange={open => !open && setViewTarget(null)}>
         {viewTarget && <StudentDetailDialog student={viewTarget} onClose={() => setViewTarget(null)} />}
+      </Dialog>
+
+      {/* Edit Student Dialog */}
+      <Dialog open={!!editTarget} onOpenChange={open => !open && setEditTarget(null)}>
+        {editTarget && (
+          <EditStudentDialog
+            student={editTarget}
+            onConfirm={(data) => handleUpdate(editTarget.id, data)}
+            onClose={() => setEditTarget(null)}
+          />
+        )}
+      </Dialog>
+
+      {/* Create Student Dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={open => !open && setIsCreateOpen(false)}>
+        {isCreateOpen && (
+          <CreateStudentDialog
+            onConfirm={handleCreate}
+            onClose={() => setIsCreateOpen(false)}
+          />
+        )}
       </Dialog>
     </MainLayout>
   );

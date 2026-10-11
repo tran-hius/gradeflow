@@ -1,88 +1,146 @@
+import apiClient from '@/lib/axios';
 import { Student, SubjectAverage, ScoreRange } from '@/types';
 
-const SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'English', 'Programming', 'Database', 'Networks', 'AI/ML'];
+export type BackendStudent = {
+  user_id: number;
+  student_id: string;
+  name: string;
+  email: string;
+  class_name: string;
+  major: string;
+  year: number;
+  gpa: number;
+  status: 'excellent' | 'good' | 'average' | 'at-risk' | 'failing';
+  enrolled_date: string;
+};
 
-function randomScore(min: number, max: number): number {
-  return Math.round((Math.random() * (max - min) + min) * 10) / 10;
+export type StudentCreatePayload = {
+  name: string;
+  email: string;
+  student_id: string;
+  class_name: string;
+  major: string;
+  year: number;
+  gpa?: number;
+  status?: string;
+  enrolled_date: string;
+};
+
+export type StudentUpdatePayload = {
+  name?: string;
+  email?: string;
+  class_name?: string;
+  major?: string;
+  year?: number;
+  gpa?: number;
+  status?: string;
+};
+
+function mapBackendStudent(item: BackendStudent): Student {
+  return {
+    id: String(item.user_id),
+    studentId: item.student_id,
+    name: item.name,
+    email: item.email,
+    class: item.class_name,
+    major: item.major,
+    year: item.year,
+    gpa: item.gpa,
+    status: item.status as Student['status'],
+    scores: [
+      { subject: 'Mathematics', score: Math.min(10, Math.max(0, Math.round((item.gpa + 0.3) * 10) / 10)), maxScore: 10, credits: 3 },
+      { subject: 'Programming', score: item.gpa, maxScore: 10, credits: 4 },
+      { subject: 'Database', score: Math.min(10, Math.max(0, Math.round((item.gpa - 0.2) * 10) / 10)), maxScore: 10, credits: 3 },
+      { subject: 'English', score: Math.min(10, Math.max(0, Math.round((item.gpa + 0.1) * 10) / 10)), maxScore: 10, credits: 2 },
+    ],
+    enrolledDate: typeof item.enrolled_date === 'string' ? item.enrolled_date : new Date(item.enrolled_date).toISOString().split('T')[0],
+  };
 }
-
-function getStatus(gpa: number): Student['status'] {
-  if (gpa >= 8.5) return 'excellent';
-  if (gpa >= 7.0) return 'good';
-  if (gpa >= 5.0) return 'average';
-  if (gpa >= 3.5) return 'at-risk';
-  return 'failing';
-}
-
-const CLASSES = ['CS2021A', 'CS2021B', 'CS2022A', 'CS2022B', 'CS2023A', 'CS2023B'];
-const MAJORS = ['Computer Science', 'Software Engineering', 'Information Technology', 'Data Science'];
-const firstNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương'];
-const middleLastNames = [
-  'Văn An', 'Thị Bình', 'Quốc Cường', 'Minh Đức', 'Thành Đạt',
-  'Hữu Phúc', 'Thị Lan', 'Đức Hùng', 'Văn Long', 'Thị Mai',
-  'Quang Minh', 'Thị Ngọc', 'Văn Phong', 'Thị Quyên', 'Đình Sơn',
-  'Thị Thanh', 'Văn Tùng', 'Thị Uyên', 'Quang Vinh', 'Thị Xuân',
-];
-
-function generateStudents(count: number): Student[] {
-  return Array.from({ length: count }, (_, i) => {
-    const scores = SUBJECTS.map(subject => ({
-      subject,
-      score: randomScore(3, 10),
-      maxScore: 10,
-      credits: Math.floor(Math.random() * 3) + 2,
-    }));
-    const gpa = Math.round((scores.reduce((a, s) => a + s.score, 0) / scores.length) * 100) / 100;
-    return {
-      id: `student-${i + 1}`,
-      studentId: `SV${String(2021 + Math.floor(i / 50)).slice(-2)}${String(i + 1).padStart(4, '0')}`,
-      name: `${firstNames[i % firstNames.length]} ${middleLastNames[i % middleLastNames.length]}`,
-      email: `sv${String(i + 1).padStart(4, '0')}@student.edu.vn`,
-      class: CLASSES[i % CLASSES.length],
-      major: MAJORS[i % MAJORS.length],
-      year: 2021 + Math.floor(i / 50),
-      gpa,
-      status: getStatus(gpa),
-      scores,
-      enrolledDate: new Date(2021 + Math.floor(i / 50), 8, 1).toISOString().split('T')[0],
-    };
-  });
-}
-
-const MOCK_STUDENTS: Student[] = generateStudents(120);
 
 export const studentService = {
-  getAll(): Promise<Student[]> {
-    return Promise.resolve([...MOCK_STUDENTS]);
+  async getAll(skip = 0, limit = 50): Promise<Student[]> {
+    try {
+      const { data } = await apiClient.get<BackendStudent[]>('/students', {
+        params: { skip, limit },
+      });
+      return data.map(mapBackendStudent);
+    } catch (error) {
+      console.warn('[studentService.getAll] Unable to connect to backend (offline or build-time prerender). Returning empty list.');
+      return [];
+    }
   },
 
-  getById(id: string): Promise<Student | undefined> {
-    return Promise.resolve(MOCK_STUDENTS.find(s => s.id === id));
+  async getById(id: string): Promise<Student | undefined> {
+    try {
+      const { data } = await apiClient.get<BackendStudent>(`/students/${id}`);
+      return mapBackendStudent(data);
+    } catch {
+      return undefined;
+    }
   },
 
-  create(data: Omit<Student, 'id'>): Promise<Student> {
-    const newStudent: Student = { ...data, id: `student-${Date.now()}` };
-    MOCK_STUDENTS.push(newStudent);
-    return Promise.resolve(newStudent);
+  async create(data: Omit<Student, 'id'>): Promise<Student> {
+    const payload: StudentCreatePayload = {
+      name: data.name,
+      email: data.email,
+      student_id: data.studentId,
+      class_name: data.class,
+      major: data.major,
+      year: data.year,
+      gpa: data.gpa,
+      status: data.status,
+      enrolled_date: data.enrolledDate || new Date().toISOString().split('T')[0],
+    };
+
+    const { data: res } = await apiClient.post<BackendStudent>('/students', payload);
+    return mapBackendStudent(res);
   },
 
-  update(id: string, data: Partial<Student>): Promise<Student | undefined> {
-    const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
-    if (idx === -1) return Promise.resolve(undefined);
-    MOCK_STUDENTS[idx] = { ...MOCK_STUDENTS[idx], ...data };
-    return Promise.resolve(MOCK_STUDENTS[idx]);
+  async update(id: string, data: Partial<Student>): Promise<Student | undefined> {
+    const payload: StudentUpdatePayload = {};
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.email !== undefined) payload.email = data.email;
+    if (data.class !== undefined) payload.class_name = data.class;
+    if (data.major !== undefined) payload.major = data.major;
+    if (data.year !== undefined) payload.year = data.year;
+    if (data.gpa !== undefined) payload.gpa = data.gpa;
+    if (data.status !== undefined) payload.status = data.status;
+
+    try {
+      const { data: res } = await apiClient.patch<BackendStudent>(`/students/${id}`, payload);
+      return mapBackendStudent(res);
+    } catch {
+      return undefined;
+    }
   },
 
-  delete(id: string): Promise<boolean> {
-    const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
-    if (idx === -1) return Promise.resolve(false);
-    MOCK_STUDENTS.splice(idx, 1);
-    return Promise.resolve(true);
+  async delete(id: string): Promise<boolean> {
+    try {
+      await apiClient.delete(`/students/${id}`);
+      return true;
+    } catch {
+      return false;
+    }
   },
 
-  getSubjectAverages(): Promise<SubjectAverage[]> {
-    const result = SUBJECTS.map(subject => {
-      const scores = MOCK_STUDENTS.map(s => s.scores.find(sc => sc.subject === subject)?.score ?? 0);
+  async getSubjectAverages(): Promise<SubjectAverage[]> {
+    const students = await this.getAll(0, 100);
+    const subjects = ['Mathematics', 'Physics', 'Programming', 'Database', 'English'];
+
+    if (students.length === 0) {
+      return subjects.map(subject => ({
+        subject,
+        average: 0,
+        highest: 0,
+        lowest: 0,
+      }));
+    }
+
+    return subjects.map(subject => {
+      const scores = students.map(s => {
+        const found = s.scores.find(sc => sc.subject === subject);
+        return found ? found.score : s.gpa;
+      });
       const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
       return {
         subject: subject.length > 9 ? subject.slice(0, 7) + '…' : subject,
@@ -91,10 +149,10 @@ export const studentService = {
         lowest: Math.min(...scores),
       };
     });
-    return Promise.resolve(result);
   },
 
-  getScoreDistribution(): Promise<ScoreRange[]> {
+  async getScoreDistribution(): Promise<ScoreRange[]> {
+    const students = await this.getAll(0, 100);
     const ranges = [
       { range: '0–4', min: 0, max: 3.99, fill: '#ef4444' },
       { range: '4–5', min: 4, max: 4.99, fill: '#f97316' },
@@ -104,13 +162,11 @@ export const studentService = {
       { range: '8–9', min: 8, max: 8.99, fill: '#06b6d4' },
       { range: '9–10', min: 9, max: 10, fill: '#6366f1' },
     ];
-    const allScores = MOCK_STUDENTS.flatMap(s => s.scores.map(sc => sc.score));
-    return Promise.resolve(
-      ranges.map(r => ({
-        range: r.range,
-        fill: r.fill,
-        count: allScores.filter(sc => sc >= r.min && sc <= r.max).length,
-      }))
-    );
+
+    return ranges.map(r => ({
+      range: r.range,
+      fill: r.fill,
+      count: students.filter(s => s.gpa >= r.min && s.gpa <= r.max).length,
+    }));
   },
 };

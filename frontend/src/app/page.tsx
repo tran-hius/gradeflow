@@ -7,7 +7,7 @@ import { InsightPanel } from '@/components/dashboard/InsightPanel';
 import { studentService } from '@/services/studentService';
 import { mean, standardDeviation, getPassRate, getAtRiskCount } from '@/utils/stats';
 import { FadeIn } from '@/components/ui/fade-in';
-import dynamic from 'next/dynamic';
+
 
 import {
   ScoreDistributionChart,

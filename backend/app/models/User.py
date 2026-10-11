@@ -2,14 +2,12 @@ import enum
 
 from sqlalchemy import String, Enum
 from sqlalchemy.orm import Mapped, mapped_column
-from database.session import Base
-
+from ..database.session import Base
 
 class Role(str, enum.Enum):
     ADMIN = "admin"
     TEACHER = "teacher"
     STUDENT = "student"
-
 
 class User(Base):
     __tablename__ = "users"
